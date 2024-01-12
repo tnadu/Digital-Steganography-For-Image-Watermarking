@@ -1,0 +1,4 @@
+bitarray==2.9.2
+jpeglib==1.0.0
+numpy==1.26.3
+piexif==1.1.3
