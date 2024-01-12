@@ -30,15 +30,15 @@ class StegJpegImage:
                 for k in range(8):
                     for l in range(max(0, 8 - k - perceptibility), 8):
                         if image_channel[i][j][k][l] > 1 or image_channel[i][j][k][l] < 0:
-                            if data_size:
-                                data.append(int(image_channel[i][j][k][l]) % 2)
-                                data_size -= 1
-                            else:
+                            data.append(int(image_channel[i][j][k][l]) % 2)
+                            data_size -= 1
+
+                            if not data_size:
                                 return data_size, data
 
         return data_size, data
 
-    def extract(self) -> (bytes, str):
+    def extract(self) -> bytes:
         logging.info("Extracting metadata from EXIF.")
         metadata = self.exif["Exif"].get(37510)
 
@@ -50,7 +50,7 @@ class StegJpegImage:
 
         metadata = metadata.decode("utf-8").split("-")
 
-        if len(metadata) < 2:
+        if len(metadata) != 2:
             logging.error("Important fields in the metadata about the embedded data are missing from the EXIF of the image."
                           "The image is either corrupted, or has been altered by other software.")
             raise TypeError("Important fields in the metadata about the embedded data are missing from the EXIF of the image."
@@ -86,18 +86,16 @@ class StegJpegImage:
             raise TypeError("The perceptibility value of the embedded data is invalid. The EXIF of the image has been modified,"
                             "which means that the image is either corrupted, or has been altered by other software.")
 
-        extension = metadata[2] if len(metadata) == 3 else None
-
         logging.info("Attempting to extract data from image.")
         data = bitarray()
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Y, data_size, data, perceptibility)
         if not data_size:
-            return data.tobytes(), extension
+            return data.tobytes()
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Cr, data_size, data, perceptibility)
         if not data_size:
-            return data.tobytes(), extension
+            return data.tobytes()
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Cb, data_size, data, perceptibility)
         if not data_size:
@@ -106,7 +104,7 @@ class StegJpegImage:
                             f"and the last {data_size} bits are missing. This might be due to cropping, EXIF modifications or other"
                             f"alterations produced by different software")
 
-        return data.tobytes(), extension
+        return data.tobytes()
 
 
 class JpegImage:
@@ -159,26 +157,26 @@ class JpegImage:
                 for k in range(8):
                     for l in range(max(0, 8 - k - self.perceptibility), 8):
                         if image_channel[i][j][k][l] > 1 or image_channel[i][j][k][l] < 0:
-                            if data:
-                                # apply bitmasks
-                                if data[0] == 0:
-                                    image_channel[i][j][k][l] &= -2
-                                else:
-                                    image_channel[i][j][k][l] |= 1
-
-                                data.pop(0)
+                            # apply bitmasks
+                            if data[0] == 0:
+                                image_channel[i][j][k][l] &= -2
                             else:
+                                image_channel[i][j][k][l] |= 1
+
+                            data.pop(0)
+
+                            if not data:
                                 return data
 
         return data
 
-    def embed_data(self, data: bytes, extension: str = None) -> StegJpegImage:
+    def embed_data(self, data: bytes) -> StegJpegImage:
         if len(data) > self.storage_capacity:
             logging.error("Size of data exceeds storage capacity of image.")
             raise ValueError("Size of data exceeds storage capacity of image.")
 
         logging.info("Embedding metadata into EXIF.")
-        metadata = f"{len(data)}-{self.perceptibility}-{extension if extension else ''}".encode("utf-8")
+        metadata = f"{len(data)}-{self.perceptibility}".encode("utf-8")
         # The UserComment tag is rarely overwritten by other software
         self.exif["Exif"][37510] = metadata
 
@@ -204,12 +202,13 @@ def main():
 
     image = JpegImage.from_file("../images/mountain.jpg")
     data *= image.storage_capacity // len(data)
-    steg_image = image.embed_data(data, "txt")
-
+    steg_image = image.embed_data(data)
     steg_image.to_file("../images/altered.jpg")
-    extracted_data, extension = steg_image.extract()
 
-    with open(f"../extracted.{extension}", "wb") as f:
+    steg_image = StegJpegImage.from_file("../images/altered.jpg")
+    extracted_data = steg_image.extract()
+
+    with open(f"../extracted.txt", "wb") as f:
         f.write(extracted_data)
 
 
