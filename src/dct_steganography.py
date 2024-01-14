@@ -12,16 +12,18 @@ class StegJpegImage:
 
     @classmethod
     def from_file(cls, image_path: str):
+        logging.debug(f"Decoding DCT blocks from stego JPEG file {image_path}.")
         image = jpeglib.read_dct(image_path)
+        logging.debug(f"Loading EXIF from stego JPEG file {image_path}.")
         exif = piexif.load(image_path)
 
         return cls(image, exif)
 
     def to_file(self, path: str):
-        logging.info("Writing steg image to disk.")
+        logging.debug(f"Encoding DCT blocks to JPEG file {path}.")
         self.steg_image.write_dct(path)
 
-        logging.info("Writing EXIF to steg image.")
+        logging.debug(f"Writing EXIF to JPEG file {path}.")
         piexif.insert(piexif.dump(self.exif), path)
 
     def __extract_data_from_channel(self, image_channel: np.ndarray, data_size: int, data: bitarray, perceptibility: int) -> (int, bitarray):
@@ -90,14 +92,17 @@ class StegJpegImage:
         data = bitarray()
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Y, data_size, data, perceptibility)
+        logging.debug(f"Extracted data from Y channel. Total size of extracted data: {len(data)} bits. Remaining: {data_size} bits.")
         if not data_size:
             return data.tobytes()
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Cr, data_size, data, perceptibility)
+        logging.debug(f"Extracted data from Cr channel. Total size of extracted data: {len(data)} bits. Remaining: {data_size} bits.")
         if not data_size:
             return data.tobytes()
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Cb, data_size, data, perceptibility)
+        logging.debug(f"Extracted data from Cb channel. Total size of extracted data: {len(data)} bits. Remaining: {data_size} bits.")
         if not data_size:
             logging.warning(f"Could not extract embedded data completely. The size of the embedded data, as it was read from the"
                             f"EXIF of the image, exceeds the storage capacity of the image. A total of {len(data)} bits were read,"
@@ -122,7 +127,9 @@ class JpegImage:
         else:
             perceptibility = perceptibility
 
+        logging.debug(f"Decoding DCT blocks from JPEG file {image_path}.")
         image = jpeglib.read_dct(image_path)
+        logging.debug(f"Loading EXIF from JPEG file {image_path}.")
         exif = piexif.load(image_path)
 
         return cls(image, exif, perceptibility)
@@ -140,12 +147,14 @@ class JpegImage:
         return number_of_available_coefficients
 
     def __get_storage_capacity(self) -> int:
+        logging.info("Computing storage capacity of image.")
+
         total_storage_capacity = 0
-        logging.info("Computing storage capacity within the luminance channel.")
+        logging.debug("Computing storage capacity within the Y channel.")
         total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Y)
-        logging.info("Computing storage capacity within the chrominance red channel.")
+        logging.debug("Computing storage capacity within the Cr channel.")
         total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Cr)
-        logging.info("Computing storage capacity within the chrominance blue channel.")
+        logging.debug("Computing storage capacity within the Cb channel.")
         total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Cb)
 
         # return the storage capacity in bytes
@@ -185,32 +194,15 @@ class JpegImage:
 
         logging.info("Embedding data into image.")
         bit_data = self.__embed_data_into_channel(self.image.Y, bit_data)
+        logging.debug(f"Embedded data to Y channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         if not bit_data:
             return StegJpegImage(self.image, self.exif)
 
         bit_data = self.__embed_data_into_channel(self.image.Cr, bit_data)
+        logging.debug(f"Embedded data to Cr channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         if not bit_data:
             return StegJpegImage(self.image, self.exif)
 
         self.__embed_data_into_channel(self.image.Cb, bit_data)
+        logging.debug(f"Embedded data to Cb channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         return StegJpegImage(self.image, self.exif)
-
-
-def main():
-    with open("../test.txt", "rb") as f:
-        data = f.read()
-
-    image = JpegImage.from_file("../images/mountain.jpg")
-    data *= image.storage_capacity // len(data)
-    steg_image = image.embed_data(data)
-    steg_image.to_file("../images/altered.jpg")
-
-    steg_image = StegJpegImage.from_file("../images/altered.jpg")
-    extracted_data = steg_image.extract()
-
-    with open(f"../extracted.txt", "wb") as f:
-        f.write(extracted_data)
-
-
-if __name__ == "__main__":
-    main()
