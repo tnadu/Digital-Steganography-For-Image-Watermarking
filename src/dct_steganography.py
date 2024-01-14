@@ -150,12 +150,12 @@ class JpegImage:
         logging.info("Computing storage capacity of image.")
 
         total_storage_capacity = 0
-        logging.debug("Computing storage capacity within the Y channel.")
         total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Y)
-        logging.debug("Computing storage capacity within the Cr channel.")
+        logging.debug(f"Storage capacity after processing the Y channel: {total_storage_capacity} bits.")
         total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Cr)
-        logging.debug("Computing storage capacity within the Cb channel.")
+        logging.debug(f"Storage capacity after processing the Cr channel: {total_storage_capacity} bits.")
         total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Cb)
+        logging.debug(f"Storage capacity after processing the Cb channel: {total_storage_capacity} bits.")
 
         # return the storage capacity in bytes
         return total_storage_capacity // 8
@@ -194,15 +194,15 @@ class JpegImage:
 
         logging.info("Embedding data into image.")
         bit_data = self.__embed_data_into_channel(self.image.Y, bit_data)
-        logging.debug(f"Embedded data to Y channel. Size of data yet to be embedded: {len(bit_data)} bits.")
+        logging.debug(f"Embedded data into Y channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         if not bit_data:
             return StegJpegImage(self.image, self.exif)
 
         bit_data = self.__embed_data_into_channel(self.image.Cr, bit_data)
-        logging.debug(f"Embedded data to Cr channel. Size of data yet to be embedded: {len(bit_data)} bits.")
+        logging.debug(f"Embedded data into Cr channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         if not bit_data:
             return StegJpegImage(self.image, self.exif)
 
         self.__embed_data_into_channel(self.image.Cb, bit_data)
-        logging.debug(f"Embedded data to Cb channel. Size of data yet to be embedded: {len(bit_data)} bits.")
+        logging.debug(f"Embedded data into Cb channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         return StegJpegImage(self.image, self.exif)
