@@ -1,6 +1,6 @@
 import logging
 import argparse
-import dct_steganography
+from steganography import dct_steganography
 
 
 def data_embedding(args):
@@ -56,11 +56,11 @@ def compute_storage_capacity(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Interface for command line use of the built-in image steganography libraries."
-                                                 "This program supports embedding arbitrary binary data into png and jpeg images."
-                                                 "It can be used to share and store sensitive information, but it can also be used"
-                                                 "to digitally watermark copyrighted material, via a special flag. For practical"
-                                                 "security purposes, it is strongly advised to encrypt data before embedding it"
+    parser = argparse.ArgumentParser(description="Interface for command line use of the built-in image steganography package. "
+                                                 "This program supports embedding arbitrary binary data into png and jpeg images. "
+                                                 "It can be used to share and store sensitive information, but it can also be used "
+                                                 "to digitally watermark copyrighted material, via a special flag. For practical "
+                                                 "security purposes, it is strongly advised to encrypt data before embedding it "
                                                  "into images.")
 
     parser.add_argument("-l", "--log-level", choices=[10, 20, 30, 40], default=20, dest="log_level", metavar="LOG-LEVEL", type=int, help="DEBUG=10, INFO=20, WARNING=30, ERROR=40")
