@@ -103,7 +103,7 @@ class StegJpegImage:
 
         data_size, data = self.__extract_data_from_channel(self.steg_image.Cb, data_size, data, perceptibility)
         logging.debug(f"Extracted data from Cb channel. Total size of extracted data: {len(data)} bits. Remaining: {data_size} bits.")
-        if not data_size:
+        if data_size:
             logging.warning(f"Could not extract embedded data completely. The size of the embedded data, as it was read from the "
                             f"EXIF of the image, exceeds the storage capacity of the image. A total of {len(data)} bits were read, "
                             f"and the last {data_size} bits are missing. This might be due to cropping, EXIF modifications or other "
