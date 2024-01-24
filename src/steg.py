@@ -1,5 +1,7 @@
 import logging
 import argparse
+
+from steganography import lsb_steganography
 from steganography import dct_steganography
 
 
@@ -23,8 +25,50 @@ def data_embedding(args):
         except ValueError:
             pass
     else:
-        # will be added once the LSB implementation is completed
-        pass
+        # Implementation for LSB
+        logging.info("Reading PNG image from disk.")
+        image = lsb_steganography.PNGImage.from_file(image_path=args.input_image)
+
+        logging.info("Loading data from disk, in preparation for embedding.")
+        with open(args.data, "rb") as file:
+            data = file.read()
+
+        if args.watermark:
+            logging.info("Multiplying data for watermarking.")
+            data *= image.storage_capacity // len(data)
+
+        try:
+            stego_image = image.embed_data(data)
+            logging.info("Writing stego image to disk.")
+            stego_image.to_file(args.output_image)
+        except ValueError:
+            pass
+
+# def data_embedding(args):
+#     logging.info("Reading image from disk.")
+#     if args.type_of_image == "jpeg":
+#         image = dct_steganography.JpegImage.from_file(image_path=args.input_image, perceptibility=args.perceptibility)
+#     else:  # PNG
+#         image = lsb_steganography.PNGImage.from_file(image_path=args.input_image)
+#
+#     logging.info("Loading data from disk, in preparation for embedding.")
+#     with open(args.data, "rb") as file:
+#         data = file.read()
+#
+#     if args.watermark:
+#         logging.info("Multiplying data for watermarking.")
+#         data *= image.storage_capacity // len(data)
+#
+#     try:
+#         stego_image = image.embed_data(data)
+#         if stego_image is not None:
+#             logging.info("Writing stego image to disk.")
+#             stego_image.to_file(args.output_image)
+#         else:
+#             logging.error("Failed to embed data into the image.")
+#     except ValueError as e:
+#         logging.error(f"An error occurred: {e}")
+
 
 
 def data_extraction(args):
@@ -41,8 +85,18 @@ def data_extraction(args):
         except TypeError:
             pass
     else:
-        # will be added once the LSB implementation is completed
-        pass
+        # implmenetare pentru png folosind LSB
+        logging.info("Reading PNG image from disk.")
+        stego_image = lsb_steganography.StegPNGImage.from_file(args.input_stego_image)
+
+        try:
+            data = stego_image.extract()
+
+            logging.info("Writing extracted data to disk.")
+            with open(args.output_extracted_data, "wb") as file:
+                file.write(data)
+        except TypeError:
+            pass
 
 
 def compute_storage_capacity(args):
@@ -51,8 +105,12 @@ def compute_storage_capacity(args):
         image = dct_steganography.JpegImage.from_file(image_path=args.input_image, perceptibility=args.perceptibility)
         print(f"Storage capacity: {image.storage_capacity}B")
     else:
-        # will be added once the LSB implementation is completed
-        pass
+        # implmenetare pentru png folosind LSB
+        logging.info("Reading PNG image from disk.")
+        image = lsb_steganography.PNGImage.from_file(image_path=args.input_image)
+
+        storage_capacity = image.storage_capacity
+        print(f"Storage capacity: {storage_capacity}B")
 
 
 def main():
