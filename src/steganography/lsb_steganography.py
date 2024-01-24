@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import logging
+from bitarray import bitarray
 
 
 class StegPNGImage:
@@ -18,38 +19,43 @@ class StegPNGImage:
 
     def to_file(self, path: str):
         logging.debug(f"Saving modified PNG file {path}.")
-        cv2.imwrite(path, self.steg_image)
+        # cv2.imwrite(path, self.steg_image)
+        cv2.imwrite(path, self.steg_image, [cv2.IMWRITE_PNG_COMPRESSION, 0])
 
-    def extract(self) -> str:
+    def extract(self):
         logging.info("Extracting data from PNG image using LSB method.")
         message_size = 0
         size_extracted = False
         message_extracted = False
         size_bits = []
         message_bits = []
+        message = bitarray()
 
-        for i, line in enumerate(self.steg_image):
-            for j, pixel in enumerate(line):
-                for c, channel in enumerate(pixel):
-                    if not size_extracted and len(size_bits) == self.size_encoding * self.byte_size:
-                        message_size = int("".join(size_bits), 2)
-                        size_extracted = True
 
-                    if not size_extracted:
-                        size_bits.append(bin(channel)[-1])
+        for i in range(self.steg_image.shape[0]):
+            for j in range(self.steg_image.shape[1]):
+                for c in range(self.steg_image.shape[2]):
+                    # if not size_extracted and len(size_bits) == self.size_encoding * self.byte_size:
+                    #     message_size = int("".join(size_bits), 2)
+                    #     size_extracted = True
+                    #
+                    # if not size_extracted:
+                    # size_bits.append(bin(channel)[-1])
 
-                    if size_extracted and not message_extracted:
-                        message_bits.append(bin(channel)[-1])
-                        if len(message_bits) == message_size * self.byte_size:
-                            message_extracted = True
-                            break
+                    # if size_extracted and not message_extracted:
+                    # message_bits.append(bin(channel)[-1])
+                    message.append(int(self.steg_image[i][j][c]) % 2)
+                        # if len(message_bits) == message_size * self.byte_size:
+                        #     message_extracted = True
+                        #     break
 
-                if message_extracted:
-                    break
-            if message_extracted:
-                break
+            #     if message_extracted:
+            #         break
+            # if message_extracted:
+            #     break
 
-        return self.__bits_to_string(message_bits)
+        return message.tobytes()
+        # return self.__bits_to_string(message_bits)
 
     def __bits_to_string(self, bits):
         message = []
@@ -75,7 +81,7 @@ class PNGImage:
         cv2.imwrite(path, self.image)
 
     def __calculate_storage_capacity(self) -> int:
-        return (self.image.shape[0] * self.image.shape[1] * self.image.shape[2]) // 8
+        return (self.image.shape[0] * self.image.shape[1] * self.image.shape[2]) // 8 // 8
 
     # def __convert_message_to_bits(self, message: str) -> list:
     #     message_length = len(message)
@@ -134,22 +140,39 @@ class PNGImage:
     #
     #     self.image = new_image
 
-    def embed_data(self, data: str):
-        message_bits = self.__convert_message_to_bits(data)
-        counter = 0
+    def embed_data(self, data: bytes):
+        # message_bits = self.__convert_message_to_bits(data)
+        if len(data) > self.storage_capacity:
+            logging.error("Size of data exceeds storage capacity of image.")
+            raise ValueError("Size of data exceeds storage capacity of image.")
+
+        bit_data = bitarray()
+        bit_data.frombytes(data)
+
         new_image = self.image.copy()
 
         for i in range(self.image.shape[0]):
             for j in range(self.image.shape[1]):
                 for c in range(self.image.shape[2]):
-                    if counter >= len(message_bits):
-                        self.image = new_image
-                        return self
+                    # apply bitmasks
+                    if bit_data[0] == 0:
+                        new_image[i][j][c] &= -2
+                    else:
+                        new_image[i][j][c] |= 1
 
-                    binary_pixel = bin(new_image[i, j, c])[:-1] + message_bits[counter]
-                    new_image[i, j, c] = int(binary_pixel, 2)
-                    counter += 1
+                    bit_data.pop(0)
+
+                    if not bit_data:
+                        break
+                else:
+                    break
+            else:
+                break
+
+                    # binary_pixel = bin(new_image[i, j, c])[:-1] + message_bits[counter]
+                    # new_image[i, j, c] = int(binary_pixel, 2)
+                    # counter += 1
 
         self.image = new_image
-        return self
+        return StegPNGImage(new_image)
 
