@@ -1,178 +1,141 @@
-import cv2
-import numpy as np
 import logging
+import numpy as np
+import cv2
+import pyexiv2
+
 from bitarray import bitarray
+from . import common_operations
 
 
-class StegPNGImage:
-    byte_size = 8
-    size_encoding = 4
-
-    def __init__(self, steg_image: np.ndarray):
+class StegPngImage:
+    def __init__(self, steg_image: np.ndarray, exif: dict):
         self.steg_image = steg_image
+        self.exif = exif
 
     @classmethod
     def from_file(cls, image_path: str):
-        logging.debug(f"Loading PNG file {image_path}.")
+        logging.debug(f"Decoding stego PNG file '{image_path}'.")
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-        return cls(image)
 
-    def to_file(self, path: str):
-        logging.debug(f"Saving modified PNG file {path}.")
-        # cv2.imwrite(path, self.steg_image)
-        cv2.imwrite(path, self.steg_image, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+        logging.debug(f"Loading EXIF from stego PNG file '{image_path}'.")
+        temporary_image = pyexiv2.Image(image_path)
+        exif = temporary_image.read_exif()
+        temporary_image.close()
 
-    def extract(self):
-        logging.info("Extracting data from PNG image using LSB method.")
-        message_size = 0
-        size_extracted = False
-        message_extracted = False
-        size_bits = []
-        message_bits = []
-        message = bitarray()
+        return cls(image, exif)
 
+    def to_file(self, image_path: str):
+        logging.debug(f"Encoding PNG file '{image_path}'.")
+        cv2.imwrite(image_path, self.steg_image, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+
+        logging.debug(f"Writing EXIF to PNG file '{image_path}'.")
+        temporary_image = pyexiv2.Image(image_path)
+        temporary_image.modify_exif(self.exif)
+        temporary_image.close()
+
+    def extract(self) -> bytes:
+        logging.info("Extracting metadata from EXIF.")
+        metadata = self.exif.get("Exif.Photo.UserComment")
+        data_size, number_of_least_significant_bits = common_operations.extract_parameters_from_metadata(metadata, 'number_of_significant_bits', range(1, 5))
+
+        logging.info("Attempting to extract data from image.")
+        data = bitarray()
 
         for i in range(self.steg_image.shape[0]):
             for j in range(self.steg_image.shape[1]):
-                for c in range(self.steg_image.shape[2]):
-                    # if not size_extracted and len(size_bits) == self.size_encoding * self.byte_size:
-                    #     message_size = int("".join(size_bits), 2)
-                    #     size_extracted = True
-                    #
-                    # if not size_extracted:
-                    # size_bits.append(bin(channel)[-1])
+                for k in range(self.steg_image.shape[2]):
+                    # get the last 'number_of_least_significant_bits' sized sub-string from the binary representation
+                    embedded_bits = f"{self.steg_image[i][j][k]:08b}"[-number_of_least_significant_bits:]
+                    data.extend(embedded_bits)
+                    data_size -= number_of_least_significant_bits
 
-                    # if size_extracted and not message_extracted:
-                    # message_bits.append(bin(channel)[-1])
-                    message.append(int(self.steg_image[i][j][c]) % 2)
-                        # if len(message_bits) == message_size * self.byte_size:
-                        #     message_extracted = True
-                        #     break
+                    if data_size <= 0:
+                        break
+                else:
+                    continue
+                break
+            else:
+                continue
+            break
 
-            #     if message_extracted:
-            #         break
-            # if message_extracted:
-            #     break
+        # when the value of 'number_of_least_significant_bits' is 3, there might be up to 2 remaining
+        # bits in the sequence of bits embedded in the last pixel value, which must be ignored
+        data = data[:-(len(data) % 8)]
 
-        return message.tobytes()
-        # return self.__bits_to_string(message_bits)
+        if data_size > 0:
+            logging.warning(f"Could not extract embedded data completely. The size of the embedded data, as it was read from the "
+                            f"EXIF of the image, exceeds the storage capacity of the image. A total of {len(data)} bits were read, "
+                            f"and the last {data_size} bits are missing. This might be due to cropping, EXIF "
+                            f"modifications or other alterations produced by different software")
 
-    def __bits_to_string(self, bits):
-        message = []
-        for i in range(0, len(bits), self.byte_size):
-            byte = bits[i:i + self.byte_size]
-            message.append(chr(int(''.join(byte), 2)))
-        return "".join(message)
+        return data.tobytes()
 
 
-class PNGImage:
-    def __init__(self, image: np.ndarray):
+class PngImage:
+    def __init__(self, image: np.ndarray, exif: dict, number_of_least_significant_bits: int = 1):
         self.image = image
-        self.storage_capacity = self.__calculate_storage_capacity()
+        self.exif = exif
+        self.number_of_least_significant_bits = number_of_least_significant_bits
+        self.storage_capacity = self.__compute_storage_capacity()
 
     @classmethod
-    def from_file(cls, image_path: str):
-        logging.debug(f"Loading PNG file {image_path}.")
+    def from_file(cls, image_path: str, number_of_least_significant_bits: int = 1):
+        if number_of_least_significant_bits not in range(1, 5):
+            logging.warning("Number of least significant bits can be between 1 and 4. Applying the default value of 1.")
+            number_of_least_significant_bits = 1
+
+        logging.debug(f"Decoding PNG file '{image_path}'.")
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-        return cls(image)
 
-    def to_file(self, path: str):
-        logging.debug(f"Saving PNG file {path}.")
-        cv2.imwrite(path, self.image)
+        logging.debug(f"Loading EXIF from PNG file '{image_path}'.")
+        temporary_image = pyexiv2.Image(image_path)
+        exif = temporary_image.read_exif()
+        temporary_image.close()
 
-    def __calculate_storage_capacity(self) -> int:
-        return (self.image.shape[0] * self.image.shape[1] * self.image.shape[2]) // 8 // 8
+        return cls(image, exif, number_of_least_significant_bits)
 
-    # def __convert_message_to_bits(self, message: str) -> list:
-    #     message_length = len(message)
-    #     if message_length > self.storage_capacity:
-    #         raise ValueError(f"Message is too long. Maximum length: {self.storage_capacity} characters")
-    #
-    #     message_bytes = message.encode('utf-8')
-    #     message_bits = []
-    #
-    #     # Encoding the length of the message in the first 32 bits
-    #     length_bits = bin(message_length)[2:].zfill(32)
-    #     message_bits.extend(length_bits)
-    #
-    #     # Encoding the message
-    #     for byte in message_bytes:
-    #         byte_bits = bin(byte)[2:].zfill(8)
-    #         message_bits.extend(byte_bits)
-    #
-    #     return message_bits
+    def __compute_storage_capacity(self) -> int:
+        logging.info("Computing storage capacity of image.")
+        return (self.image.size * self.number_of_least_significant_bits) // 8
 
-    def __convert_message_to_bits(self, message) -> list:
-        if isinstance(message, str):
-            message = message.encode('utf-8')
-
-        message_length = len(message)
-        if message_length > self.storage_capacity:
-            raise ValueError(f"Message is too long. Maximum length: {self.storage_capacity} characters")
-
-        message_bits = []
-
-        # Encoding the length of the message in the first 32 bits
-        length_bits = bin(message_length)[2:].zfill(32)
-        message_bits.extend(length_bits)
-
-        # Encoding the message
-        for byte in message:
-            byte_bits = bin(byte)[2:].zfill(8)
-            message_bits.extend(byte_bits)
-
-        return message_bits
-
-    # def embed_data(self, data: str):
-    #     message_bits = self.__convert_message_to_bits(data)
-    #     counter = 0
-    #     new_image = self.image.copy()
-    #
-    #     for i in range(self.image.shape[0]):
-    #         for j in range(self.image.shape[1]):
-    #             for c in range(self.image.shape[2]):
-    #                 binary_pixel = bin(new_image[i, j, c])[:-1] + message_bits[counter]
-    #                 new_image[i, j, c] = int(binary_pixel, 2)
-    #                 counter += 1
-    #                 if counter == len(message_bits):
-    #                     self.image = new_image
-    #                     return
-    #
-    #     self.image = new_image
-
-    def embed_data(self, data: bytes):
-        # message_bits = self.__convert_message_to_bits(data)
+    def embed_data(self, data: bytes) -> StegPngImage:
         if len(data) > self.storage_capacity:
             logging.error("Size of data exceeds storage capacity of image.")
             raise ValueError("Size of data exceeds storage capacity of image.")
 
+        logging.info("Embedding metadata into EXIF.")
+        # store the size of the embedded data in number of bits
+        metadata = f"{len(data) * 8}-{self.number_of_least_significant_bits}"
+        # The UserComment tag is rarely overwritten by other software
+        self.exif["Exif.Photo.UserComment"] = metadata
+
+        image = self.image.copy()
         bit_data = bitarray()
         bit_data.frombytes(data)
 
-        new_image = self.image.copy()
+        logging.info("Embedding data into image.")
+        for i in range(image.shape[0]):
+            for j in range(image.shape[1]):
+                for k in range(image.shape[2]):
+                    # indexing is much (MUCH) faster than deletion for bitarray objects
+                    left_bound = i * image.shape[1] * image.shape[2] * self.number_of_least_significant_bits + j * image.shape[2] * self.number_of_least_significant_bits + k * self.number_of_least_significant_bits
+                    right_bound = i * image.shape[1] * image.shape[2] * self.number_of_least_significant_bits + j * image.shape[2] * self.number_of_least_significant_bits + (k + 1) * self.number_of_least_significant_bits
 
-        for i in range(self.image.shape[0]):
-            for j in range(self.image.shape[1]):
-                for c in range(self.image.shape[2]):
-                    # apply bitmasks
-                    if bit_data[0] == 0:
-                        new_image[i][j][c] &= -2
-                    else:
-                        new_image[i][j][c] |= 1
+                    # representing a color channel value in binary form, on 8 bits, as a string, and substituting the
+                    # last 'number_of_least_significant_bits' bits with the corresponding bits in the covert data
+                    pixel_value = f"{image[i][j][k]:08b}"[:-self.number_of_least_significant_bits] + bit_data[left_bound:right_bound].to01()
+                    # padding with 0s to the right (when the data size isn't divisible by 3)
+                    pixel_value = pixel_value.ljust(8, '0')
+                    pixel_value = int(pixel_value, 2)
+                    image[i][j][k] = pixel_value
 
-                    bit_data.pop(0)
-
-                    if not bit_data:
+                    if right_bound >= len(bit_data):
                         break
                 else:
-                    break
-            else:
+                    continue
                 break
+            else:
+                continue
+            break
 
-                    # binary_pixel = bin(new_image[i, j, c])[:-1] + message_bits[counter]
-                    # new_image[i, j, c] = int(binary_pixel, 2)
-                    # counter += 1
-
-        self.image = new_image
-        return StegPNGImage(new_image)
-
+        return StegPngImage(image, self.exif)

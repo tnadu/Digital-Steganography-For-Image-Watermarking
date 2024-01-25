@@ -14,14 +14,14 @@ def storage_stats_jpeg(filename: str):
     logging.info(f"Preparing storage statistics for '{filename}.jpg'...")
 
     for perceptibility in range(1, 9):
-        image = dct_steganography.JpegImage.from_file(f"../placeholder-images/jpeg/{filename}.jpg", perceptibility)
+        image = dct_steganography.JpegImage.from_file(f"../assets/jpeg/{filename}.jpg", perceptibility)
         logging.info(f"For perceptibility {perceptibility}: {image.storage_capacity}B")
 
 
 def storage_stats_png(filename: str):
     logging.info(f"Preparing storage statistics for '{filename}.png'...")
 
-    image = lsb_steganography.PNGImage.from_file(f"../placeholder-images/png/{filename}.png")
+    image = lsb_steganography.PngImage.from_file(f"../assets/png/{filename}.png")
     storage_capacity = image.storage_capacity
     logging.info(f"Storage capacity: {storage_capacity}B")
 

@@ -1,8 +1,10 @@
-import numpy as np
-from bitarray import bitarray
 import logging
+import numpy as np
 import jpeglib
-import piexif
+import pyexiv2
+
+from bitarray import bitarray
+from . import common_operations
 
 
 class StegJpegImage:
@@ -12,26 +14,31 @@ class StegJpegImage:
 
     @classmethod
     def from_file(cls, image_path: str):
-        logging.debug(f"Decoding DCT blocks from stego JPEG file {image_path}.")
+        logging.debug(f"Decoding DCT blocks from stego JPEG file '{image_path}'.")
         image = jpeglib.read_dct(image_path)
-        logging.debug(f"Loading EXIF from stego JPEG file {image_path}.")
-        exif = piexif.load(image_path)
+
+        logging.debug(f"Loading EXIF from stego JPEG file '{image_path}'.")
+        temporary_image = pyexiv2.Image(image_path)
+        exif = temporary_image.read_exif()
+        temporary_image.close()
 
         return cls(image, exif)
 
-    def to_file(self, path: str):
-        logging.debug(f"Encoding DCT blocks to JPEG file {path}.")
-        self.steg_image.write_dct(path)
+    def to_file(self, image_path: str):
+        logging.debug(f"Encoding DCT blocks to JPEG file '{image_path}'.")
+        self.steg_image.write_dct(image_path)
 
-        logging.debug(f"Writing EXIF to JPEG file {path}.")
-        piexif.insert(piexif.dump(self.exif), path)
+        logging.debug(f"Writing EXIF to JPEG file '{image_path}'.")
+        temporary_image = pyexiv2.Image(image_path)
+        temporary_image.modify_exif(self.exif)
+        temporary_image.close()
 
     def __extract_data_from_channel(self, image_channel: np.ndarray, data_size: int, data: bitarray, perceptibility: int) -> (int, bitarray):
         for i in range(image_channel.shape[0]):
             for j in range(image_channel.shape[1]):
                 for k in range(8):
                     for l in range(max(0, 8 - k - perceptibility), 8):
-                        if image_channel[i][j][k][l] > 1 or image_channel[i][j][k][l] < 0:
+                        if image_channel[i][j][k][l] not in [0, 1]:
                             data.append(int(image_channel[i][j][k][l]) % 2)
                             data_size -= 1
 
@@ -42,51 +49,8 @@ class StegJpegImage:
 
     def extract(self) -> bytes:
         logging.info("Extracting metadata from EXIF.")
-        metadata = self.exif["Exif"].get(37510)
-
-        if not metadata:
-            logging.error("Metadata about the embedded data is missing from the EXIF of the image. "
-                          "The image is either corrupted, or has been altered by other software.")
-            raise TypeError("Metadata about the embedded data is missing from the EXIF of the image. "
-                            "The image is either corrupted, or has been altered by other software.")
-
-        metadata = metadata.decode("utf-8").split("-")
-
-        if len(metadata) != 2:
-            logging.error("Important fields in the metadata about the embedded data are missing from the EXIF of the image. "
-                          "The image is either corrupted, or has been altered by other software.")
-            raise TypeError("Important fields in the metadata about the embedded data are missing from the EXIF of the image. "
-                            "The image is either corrupted, or has been altered by other software.")
-
-        try:
-            data_size = int(metadata[0])
-            # convert bytes to bits
-            data_size *= 8
-        except ValueError:
-            logging.error("The size of the embedded data is not a valid integer. The EXIF of the image has been modified, "
-                          "which means that the image is either corrupted, or has been altered by other software.")
-            raise TypeError("The size of the embedded data is not a valid integer. The EXIF of the image has been modified, "
-                            "which means that the image is either corrupted, or has been altered by other software.")
-
-        if data_size < 1:
-            logging.error("The size of the embedded data is invalid. The EXIF of the image has been modified, which "
-                          "means that the image is either corrupted, or has been altered by other software.")
-            raise TypeError("The size of the embedded data is invalid. The EXIF of the image has been modified, which "
-                            "means that the image is either corrupted, or has been altered by other software.")
-
-        try:
-            perceptibility = int(metadata[1])
-        except ValueError:
-            logging.error("The perceptibility value of the embedded data is not a valid integer. The EXIF of the image has been "
-                          "modified, which means that the image is either corrupted, or has been altered by other software.")
-            raise TypeError("The perceptibility value of the embedded data is not a valid integer. The EXIF of the image has been "
-                            "modified, which means that the image is either corrupted, or has been altered by other software.")
-
-        if perceptibility < 1 or perceptibility > 8:
-            logging.error("The perceptibility value of the embedded data is invalid. The EXIF of the image has been modified, "
-                          "which means that the image is either corrupted, or has been altered by other software.")
-            raise TypeError("The perceptibility value of the embedded data is invalid. The EXIF of the image has been modified, "
-                            "which means that the image is either corrupted, or has been altered by other software.")
+        metadata = self.exif.get("Exif.Photo.UserComment")
+        data_size, perceptibility = common_operations.extract_parameters_from_metadata(metadata, 'perceptibility', range(1, 9))
 
         logging.info("Attempting to extract data from image.")
         data = bitarray()
@@ -117,44 +81,45 @@ class JpegImage:
         self.image = image
         self.exif = exif
         self.perceptibility = perceptibility
-        self.storage_capacity = self.__get_storage_capacity()
+        self.storage_capacity = self.__compute_storage_capacity()
 
     @classmethod
     def from_file(cls, image_path: str, perceptibility: int = 3):
-        if perceptibility < 1 or perceptibility > 8:
-            logging.warning("Perceptibility can be between 1 and 8. Setting perceptibility to the default value of 3.")
+        if perceptibility not in range(1, 9):
+            logging.warning("Perceptibility can be between 1 and 8. Applying the default value of 3.")
             perceptibility = 3
-        else:
-            perceptibility = perceptibility
 
-        logging.debug(f"Decoding DCT blocks from JPEG file {image_path}.")
+        logging.debug(f"Decoding DCT blocks from JPEG file '{image_path}'.")
         image = jpeglib.read_dct(image_path)
-        logging.debug(f"Loading EXIF from JPEG file {image_path}.")
-        exif = piexif.load(image_path)
+
+        logging.debug(f"Loading EXIF from JPEG file '{image_path}'.")
+        temporary_image = pyexiv2.Image(image_path)
+        exif = temporary_image.read_exif()
+        temporary_image.close()
 
         return cls(image, exif, perceptibility)
 
-    def __get_number_of_available_coefficients(self, image_channel: np.ndarray) -> int:
+    def __compute_number_of_available_coefficients(self, image_channel: np.ndarray) -> int:
         number_of_available_coefficients = 0
 
         for i in range(image_channel.shape[0]):
             for j in range(image_channel.shape[1]):
                 for k in range(8):
                     for l in range(max(0, 8 - k - self.perceptibility), 8):
-                        if image_channel[i][j][k][l] > 1 or image_channel[i][j][k][l] < 0:
+                        if image_channel[i][j][k][l] not in [0, 1]:
                             number_of_available_coefficients += 1
 
         return number_of_available_coefficients
 
-    def __get_storage_capacity(self) -> int:
+    def __compute_storage_capacity(self) -> int:
         logging.info("Computing storage capacity of image.")
 
         total_storage_capacity = 0
-        total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Y)
+        total_storage_capacity += self.__compute_number_of_available_coefficients(self.image.Y)
         logging.debug(f"Storage capacity after processing the Y channel: {total_storage_capacity} bits.")
-        total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Cr)
+        total_storage_capacity += self.__compute_number_of_available_coefficients(self.image.Cr)
         logging.debug(f"Storage capacity after processing the Cr channel: {total_storage_capacity} bits.")
-        total_storage_capacity += self.__get_number_of_available_coefficients(self.image.Cb)
+        total_storage_capacity += self.__compute_number_of_available_coefficients(self.image.Cb)
         logging.debug(f"Storage capacity after processing the Cb channel: {total_storage_capacity} bits.")
 
         # return the storage capacity in bytes
@@ -165,7 +130,7 @@ class JpegImage:
             for j in range(image_channel.shape[1]):
                 for k in range(8):
                     for l in range(max(0, 8 - k - self.perceptibility), 8):
-                        if image_channel[i][j][k][l] > 1 or image_channel[i][j][k][l] < 0:
+                        if image_channel[i][j][k][l] not in [0, 1]:
                             # apply bitmasks
                             if data[0] == 0:
                                 image_channel[i][j][k][l] &= -2
@@ -185,24 +150,26 @@ class JpegImage:
             raise ValueError("Size of data exceeds storage capacity of image.")
 
         logging.info("Embedding metadata into EXIF.")
-        metadata = f"{len(data)}-{self.perceptibility}".encode("utf-8")
+        # store the size of the embedded data in number of bits
+        metadata = f"{len(data) * 8}-{self.perceptibility}"
         # The UserComment tag is rarely overwritten by other software
-        self.exif["Exif"][37510] = metadata
+        self.exif["Exif.Photo.UserComment"] = metadata
 
+        image = self.image.copy()
         bit_data = bitarray()
         bit_data.frombytes(data)
 
         logging.info("Embedding data into image.")
-        bit_data = self.__embed_data_into_channel(self.image.Y, bit_data)
+        bit_data = self.__embed_data_into_channel(image.Y, bit_data)
         logging.debug(f"Embedded data into Y channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         if not bit_data:
-            return StegJpegImage(self.image, self.exif)
+            return StegJpegImage(image, self.exif)
 
-        bit_data = self.__embed_data_into_channel(self.image.Cr, bit_data)
+        bit_data = self.__embed_data_into_channel(image.Cr, bit_data)
         logging.debug(f"Embedded data into Cr channel. Size of data yet to be embedded: {len(bit_data)} bits.")
         if not bit_data:
-            return StegJpegImage(self.image, self.exif)
+            return StegJpegImage(image, self.exif)
 
-        self.__embed_data_into_channel(self.image.Cb, bit_data)
+        self.__embed_data_into_channel(image.Cb, bit_data)
         logging.debug(f"Embedded data into Cb channel. Size of data yet to be embedded: {len(bit_data)} bits.")
-        return StegJpegImage(self.image, self.exif)
+        return StegJpegImage(image, self.exif)
