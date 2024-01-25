@@ -114,35 +114,34 @@ class JpegImage:
     def __compute_storage_capacity(self) -> int:
         logging.info("Computing storage capacity of image.")
 
-        total_storage_capacity = 0
-        total_storage_capacity += self.__compute_number_of_available_coefficients(self.image.Y)
-        logging.debug(f"Storage capacity after processing the Y channel: {total_storage_capacity} bits.")
-        total_storage_capacity += self.__compute_number_of_available_coefficients(self.image.Cr)
-        logging.debug(f"Storage capacity after processing the Cr channel: {total_storage_capacity} bits.")
-        total_storage_capacity += self.__compute_number_of_available_coefficients(self.image.Cb)
-        logging.debug(f"Storage capacity after processing the Cb channel: {total_storage_capacity} bits.")
+        storage_capacity_in_Y = self.__compute_number_of_available_coefficients(self.image.Y)
+        logging.debug(f"Storage capacity in the Y channel: {storage_capacity_in_Y} bits.")
+        storage_capacity_in_Cr = self.__compute_number_of_available_coefficients(self.image.Cr)
+        logging.debug(f"Storage capacity in the Cr channel: {storage_capacity_in_Cr} bits.")
+        storage_capacity_in_Cb = self.__compute_number_of_available_coefficients(self.image.Cb)
+        logging.debug(f"Storage capacity in the Cb channel: {storage_capacity_in_Cb} bits.")
 
         # return the storage capacity in bytes
-        return total_storage_capacity // 8
+        return (storage_capacity_in_Y + storage_capacity_in_Cr + storage_capacity_in_Cb) // 8
 
-    def __embed_data_into_channel(self, image_channel: np.ndarray, data: bitarray) -> bitarray:
+    def __embed_data_into_channel(self, image_channel: np.ndarray, data: bitarray, index: int = 0) -> int:
         for i in range(image_channel.shape[0]):
             for j in range(image_channel.shape[1]):
                 for k in range(8):
                     for l in range(max(0, 8 - k - self.perceptibility), 8):
                         if image_channel[i][j][k][l] not in [0, 1]:
                             # apply bitmasks
-                            if data[0] == 0:
+                            if data[index] == 0:
                                 image_channel[i][j][k][l] &= -2
                             else:
                                 image_channel[i][j][k][l] |= 1
 
-                            data.pop(0)
+                            index += 1
 
-                            if not data:
-                                return data
+                            if index == len(data):
+                                return index
 
-        return data
+        return index
 
     def embed_data(self, data: bytes) -> StegJpegImage:
         if len(data) > self.storage_capacity:
@@ -160,16 +159,18 @@ class JpegImage:
         bit_data.frombytes(data)
 
         logging.info("Embedding data into image.")
-        bit_data = self.__embed_data_into_channel(image.Y, bit_data)
-        logging.debug(f"Embedded data into Y channel. Size of data yet to be embedded: {len(bit_data)} bits.")
-        if not bit_data:
+        index = self.__embed_data_into_channel(image.Y, bit_data)
+        logging.debug(f"Embedded {index} bits into Y channel.")
+        if index == len(bit_data):
             return StegJpegImage(image, self.exif)
 
-        bit_data = self.__embed_data_into_channel(image.Cr, bit_data)
-        logging.debug(f"Embedded data into Cr channel. Size of data yet to be embedded: {len(bit_data)} bits.")
-        if not bit_data:
+        bits_embedded_in_Y = index
+        index = self.__embed_data_into_channel(image.Cr, bit_data, index)
+        logging.debug(f"Embedded {index - bits_embedded_in_Y} bits into Cr channel.")
+        if index == len(bit_data):
             return StegJpegImage(image, self.exif)
 
-        self.__embed_data_into_channel(image.Cb, bit_data)
-        logging.debug(f"Embedded data into Cb channel. Size of data yet to be embedded: {len(bit_data)} bits.")
+        bits_embedded_in_Cr = index - bits_embedded_in_Y
+        index = self.__embed_data_into_channel(image.Cb, bit_data, index)
+        logging.debug(f"Embedded {index - bits_embedded_in_Y - bits_embedded_in_Cr} bits into Cb channel.")
         return StegJpegImage(image, self.exif)
