@@ -42,14 +42,6 @@ def compute_mse(image: np.ndarray, stego_image: np.ndarray) -> float:
     return np.sum((image - stego_image) ** 2) / image.size
 
 
-def mse(image_file: str, stego_file: str) -> None:
-    logging.info(f"Computing MSE for image '{image_file}' and stego image '{stego_file}'...")
-    image = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
-    stego_image = cv2.imread(stego_file, cv2.IMREAD_UNCHANGED)
-
-    logging.info(f"MSE = {compute_mse(image, stego_image):.2f}")
-
-
 def psnr(image_file: str, stego_file: str) -> None:
     logging.info(f"Computing PSNR for image '{image_file}' and stego image '{stego_file}'...")
     image = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
@@ -171,8 +163,6 @@ def main(args):
             storage_stats_png(args.storage_stats)
     elif args.histogram:
         histogram(*args.histogram)
-    elif args.mse:
-        mse(*args.mse)
     elif args.psnr:
         psnr(*args.psnr)
     elif args.ssim:
@@ -204,7 +194,6 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-s", "--storage-stats", choices=["portrait", "sky", "chess"], dest="storage_stats", metavar="BUILT-IN-IMAGE")
     group.add_argument("-i", "--histogram", nargs=2, metavar=("SOURCE-FILE", "DESTINATION"))
-    group.add_argument("-mse", "--mean-squared-error", nargs=2, dest="mse", metavar=("IMAGE-FILE", "STEGO-FILE"))
     group.add_argument("-psnr", "--peak-signal-to-noise-ratio", dest="psnr", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
     group.add_argument("-ssim", "--structural-similarity", dest="ssim", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
     group.add_argument("-c", "--crop", nargs=2, metavar=("SOURCE-FILE", "DESTINATION"))

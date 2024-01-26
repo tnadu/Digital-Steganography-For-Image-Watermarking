@@ -69,10 +69,10 @@ def main():
                                                  "into images.")
 
     parser.add_argument("-l", "--log-level", choices=[10, 20, 30, 40], default=20, dest="log_level", metavar="LOG-LEVEL", type=int, help="DEBUG=10, INFO=20, WARNING=30, ERROR=40")
+    parser.add_argument("-t", "--type-of-image", choices=["jpeg", "png"], dest="type_of_image", metavar="TYPE-OF-IMAGE", required=True, help="when 'jpeg', the JSTEG algorithm is used; when 'png', the LSB algorithm is used")
     subparsers = parser.add_subparsers(title="subcommands", dest="subcommand", required=True)
 
     embedding_parser = subparsers.add_parser("embed", aliases=["em", "m"], description="Subcommand for embedding arbitrary data into an image.")
-    embedding_parser.add_argument("-t", "--type-of-image", choices=["jpeg", "png"], dest="type_of_image", metavar="TYPE-OF-IMAGE", required=True, help="when 'jpeg', the JSTEG algorithm is used; when 'png', the LSB algorithm is used")
     embedding_parser.add_argument("-i", "--input-image", dest="input_image", metavar="INPUT-IMAGE", type=str, required=True, help="path to image in which data will be embedded")
     embedding_parser.add_argument("-o", "--output-image", dest="output_image", metavar="OUTPUT-IMAGE", type=str, required=True, help="path to which the stego image will be saved")
     embedding_parser.add_argument("-d", "--data", type=str, required=True, help="path to the data which will be embedded into the chosen image")
@@ -81,12 +81,10 @@ def main():
     embedding_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data")
 
     extraction_parser = subparsers.add_parser("extract", aliases=["ex", "x"], description="Subcommand for extracting arbitrary data from a stego image.")
-    extraction_parser.add_argument("-t", "--type-of-image", choices=["jpeg", "png"], dest="type_of_image", metavar="TYPE-OF-IMAGE", required=True, help="when 'jpeg', the JSTEG algorithm is used; when 'png', the LSB algorithm is used")
     extraction_parser.add_argument("-i", "--input-stego-image", dest="input_stego_image", metavar="INPUT-STEGO-IMAGE", type=str, required=True, help="path to the stego image from which data will be extracted")
     extraction_parser.add_argument("-o", "--output-extracted-data", dest="output_extracted_data", metavar="OUTPUT-EXTRACTED-DATA", type=str, required=True, help="path to which the extracted data will be saved")
 
     storage_capacity_parser = subparsers.add_parser("storage", aliases=["s"], description="Subcommand for computing the storage capacity of a given image.")
-    storage_capacity_parser.add_argument("-t", "--type-of-image", choices=["jpeg", "png"], dest="type_of_image", metavar="TYPE-OF-IMAGE", required=True, help="when 'jpeg', the JSTEG algorithm is used; when 'png', the LSB algorithm is used")
     storage_capacity_parser.add_argument("-i", "--input-image", dest="input_image", metavar="INPUT-IMAGE", type=str, required=True, help="path to image for which the storage capacity will be computed")
     storage_capacity_parser.add_argument("-n", "--number-of-least-significant-bits", choices=range(1, 5), default=1, dest="number_of_least_significant_bits", type=int, help="only available for PNG images")
     storage_capacity_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data")
