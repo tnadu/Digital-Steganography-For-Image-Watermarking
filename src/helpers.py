@@ -1,13 +1,13 @@
 import logging
 import argparse
+import re
 import jpeglib
 import cv2
-import re
-from bitarray import bitarray
+import pyexiv2
 
+from bitarray import bitarray
 from steganography import lsb_steganography
 from steganography import dct_steganography
-from PIL import Image
 
 
 def storage_stats_jpeg(filename: str):
@@ -21,9 +21,9 @@ def storage_stats_jpeg(filename: str):
 def storage_stats_png(filename: str):
     logging.info(f"Preparing storage statistics for '{filename}.png'...")
 
-    image = lsb_steganography.PngImage.from_file(f"../assets/png/{filename}.png")
-    storage_capacity = image.storage_capacity
-    logging.info(f"Storage capacity: {storage_capacity}B")
+    for number_of_least_significant_bit in range(1, 5):
+        image = lsb_steganography.PngImage.from_file(f"../assets/png/{filename}.png", number_of_least_significant_bit)
+        logging.info(f"For {number_of_least_significant_bit} least significant bits: {image.storage_capacity}B")
 
 
 def crop_jpeg(source_file: str, destination: str):
@@ -32,13 +32,15 @@ def crop_jpeg(source_file: str, destination: str):
 
     # only keep the middle third of the image in both dimensions
     image.Y = image.Y[image.Y.shape[0] // 3: 2 * image.Y.shape[0] // 3,
-              image.Y.shape[1] // 3: 2 * image.Y.shape[1] // 3]
+                      image.Y.shape[1] // 3: 2 * image.Y.shape[1] // 3]
     logging.info(f"Cropped Y channel.")
+
     image.Cr = image.Cr[image.Cr.shape[0] // 3: 2 * image.Cr.shape[0] // 3,
-               image.Cr.shape[1] // 3: 2 * image.Cr.shape[1] // 3]
+                        image.Cr.shape[1] // 3: 2 * image.Cr.shape[1] // 3]
     logging.info(f"Cropped Cr channel.")
+
     image.Cb = image.Cb[image.Cb.shape[0] // 3: 2 * image.Cb.shape[0] // 3,
-               image.Cb.shape[1] // 3: 2 * image.Cb.shape[1] // 3]
+                        image.Cb.shape[1] // 3: 2 * image.Cb.shape[1] // 3]
     logging.info(f"Cropped Cb channel.")
 
     image.height = image.Y.shape[0] * 8
@@ -49,20 +51,19 @@ def crop_jpeg(source_file: str, destination: str):
 
 def crop_png(source_file: str, destination: str):
     logging.info(f"Cropping '{source_file}.png' to its middle third in both dimensions...")
-    image = Image.open(source_file)
+    image = cv2.imread(source_file, cv2.IMREAD_UNCHANGED)
+    temporary_image = pyexiv2.Image(source_file)
+    exif = temporary_image.read_exif()
+    temporary_image.close()
 
-    width, height = image.size
-    left = width // 3
-    top = height // 3
-    right = 2 * width // 3
-    bottom = 2 * height // 3
+    image = image[image.shape[0] // 3: 2 * image.shape[0] // 3,
+                  image.shape[1] // 3: 2 * image.shape[1] // 3]
+    logging.info("Cropped image.")
 
-    # Crop the center of the image
-    cropped_image = image.crop((left, top, right, bottom))
-    logging.info("Image cropped.")
-
-    cropped_image.save(destination)
-    logging.info(f"Cropped image saved to '{destination}'.")
+    cv2.imwrite(destination, image, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    temporary_image = pyexiv2.Image(destination)
+    temporary_image.modify_exif(exif)
+    temporary_image.close()
 
 
 def recover(source_file: str, pattern_file: str):
@@ -88,15 +89,14 @@ def recover(source_file: str, pattern_file: str):
 
     maximum_number_of_matches = max(number_of_matches)
     leading_bits_removed = number_of_matches.index(maximum_number_of_matches)
-    logging.info(
-        f"Found {maximum_number_of_matches} matches of the pattern in the source file, after removing the leading {leading_bits_removed} bits.")
+    logging.info(f"Found {maximum_number_of_matches} matches of the pattern in the source file, after removing the leading {leading_bits_removed} bits.")
 
 
 def visual_attack_jpeg(source_file: str, destination: str, number_of_least_significant_bits: str, luminance_boost: str):
-    logging.info(f"Preparing bitmask for visual attack on {source_file}...")
+    logging.info(f"Preparing bitmask for visual attack on '{source_file}'...")
     bitmask = 255 >> (8 - int(number_of_least_significant_bits))
 
-    image = cv2.imread(source_file, cv2.IMREAD_GRAYSCALE)
+    image = cv2.imread(source_file, cv2.IMREAD_UNCHANGED)
     image &= bitmask
     logging.info("Bitmask applied.")
 
@@ -105,26 +105,17 @@ def visual_attack_jpeg(source_file: str, destination: str, number_of_least_signi
     cv2.imwrite(destination, image)
 
 
-def visual_attack_png(source_file: str, destination: str, number_of_least_significant_bits: int, luminance_boost: int):
-    logging.info(f"Preparing bitmask for visual attack on {source_file}...")
+def visual_attack_png(source_file: str, destination: str, number_of_least_significant_bits: str, luminance_boost: str):
+    logging.info(f"Preparing bitmask for visual attack on '{source_file}'...")
     bitmask = 255 >> (8 - int(number_of_least_significant_bits))
 
     image = cv2.imread(source_file, cv2.IMREAD_UNCHANGED)
-    # Apply bitmask on every channel of PNG image Aplicarea
-    if image.shape[2] == 4:  # Check if the image contains an alpha channel(a channel that controls the opacity of every pixel)
-        for i in range(3):  # Apply bitmask on RGB channels
-            image[:, :, i] &= bitmask
-    else:
-        for i in range(image.shape[2]):  # Apply bitmask on all channels except alpha channel
-            image[:, :, i] &= bitmask
-
+    image[:, :, [0, 1, 2]] &= bitmask
     logging.info("Bitmask applied.")
 
-    image <<= int(luminance_boost)
+    image[:, :, [0, 1, 2]] <<= int(luminance_boost)
     logging.info("Luminance boosted.")
-
     cv2.imwrite(destination, image)
-    logging.info(f"Modified image saved to {destination}.")
 
 
 def main(args):
@@ -158,12 +149,14 @@ if __name__ == '__main__':
                         required=True)
 
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("-s", "--storage-stats", choices=["cheetah", "forest", "mountain", "snowy", "wolf"],
-                       dest="storage_stats", metavar="BUILT-IN-IMAGE")
+    group.add_argument("-s", "--storage-stats", choices=["portrait", "sky", "chess"], dest="storage_stats", metavar="BUILT-IN-IMAGE")
+    group.add_argument("-i", "--histogram", nargs=2, metavar=("SOURCE-FILE", "DESTINATION"))
+    group.add_argument("-mse", "--mean-squared-error", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
+    group.add_argument("-psnr", "--peak-signal-to-noise-ratio", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
+    group.add_argument("-ssim", "--structural-similarity", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
     group.add_argument("-c", "--crop", nargs=2, metavar=("SOURCE-FILE", "DESTINATION"))
     group.add_argument("-r", "--recover", nargs=2, metavar=("SOURCE-FILE", "DATA-TO-SEARCH-FOR"))
-    group.add_argument("-v", "--visual-attack", nargs=4,
-                       metavar=("SOURCE-FILE", "DESTINATION", "NUMBER-OF-LEAST-SIGNIFICANT-BITS", "LUMINANCE-BOOST"))
+    group.add_argument("-v", "--visual-attack", nargs=4, metavar=("SOURCE-FILE", "DESTINATION", "NUMBER-OF-LEAST-SIGNIFICANT-BITS", "LUMINANCE-BOOST"))
 
     arguments = parser.parse_args()
     main(arguments)

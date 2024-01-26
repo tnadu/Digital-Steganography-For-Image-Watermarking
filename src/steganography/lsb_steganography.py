@@ -43,7 +43,7 @@ class StegPngImage:
 
         for i in range(self.steg_image.shape[0]):
             for j in range(self.steg_image.shape[1]):
-                for k in range(self.steg_image.shape[2]):
+                for k in range(3):
                     # get the last 'number_of_least_significant_bits' sized sub-string from the binary representation
                     embedded_bits = f"{self.steg_image[i][j][k]:08b}"[-number_of_least_significant_bits:]
                     data.extend(embedded_bits)
@@ -60,7 +60,8 @@ class StegPngImage:
 
         # when the value of 'number_of_least_significant_bits' is 3, there might be up to 2 remaining
         # bits in the sequence of bits embedded in the last pixel value, which must be ignored
-        data = data[:-(len(data) % 8)]
+        if len(data) % 8:
+            data = data[:-(len(data) % 8)]
 
         if data_size > 0:
             logging.warning(f"Could not extract embedded data completely. The size of the embedded data, as it was read from the "
@@ -116,10 +117,10 @@ class PngImage:
         logging.info("Embedding data into image.")
         for i in range(image.shape[0]):
             for j in range(image.shape[1]):
-                for k in range(image.shape[2]):
+                for k in range(3):
                     # indexing is much (MUCH) faster than deletion for bitarray objects
-                    left_bound = i * image.shape[1] * image.shape[2] * self.number_of_least_significant_bits + j * image.shape[2] * self.number_of_least_significant_bits + k * self.number_of_least_significant_bits
-                    right_bound = i * image.shape[1] * image.shape[2] * self.number_of_least_significant_bits + j * image.shape[2] * self.number_of_least_significant_bits + (k + 1) * self.number_of_least_significant_bits
+                    left_bound = i * image.shape[1] * 3 * self.number_of_least_significant_bits + j * 3 * self.number_of_least_significant_bits + k * self.number_of_least_significant_bits
+                    right_bound = i * image.shape[1] * 3 * self.number_of_least_significant_bits + j * 3 * self.number_of_least_significant_bits + (k + 1) * self.number_of_least_significant_bits
 
                     # representing a color channel value in binary form, on 8 bits, as a string, and substituting the
                     # last 'number_of_least_significant_bits' bits with the corresponding bits in the covert data
