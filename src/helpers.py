@@ -4,13 +4,16 @@ import re
 import jpeglib
 import cv2
 import pyexiv2
+import numpy as np
+import matplotlib.pyplot as plt
 
 from bitarray import bitarray
+from skimage.metrics import structural_similarity
 from steganography import lsb_steganography
 from steganography import dct_steganography
 
 
-def storage_stats_jpeg(filename: str):
+def storage_stats_jpeg(filename: str) -> None:
     logging.info(f"Preparing storage statistics for '{filename}.jpg'...")
 
     for perceptibility in range(1, 9):
@@ -18,7 +21,7 @@ def storage_stats_jpeg(filename: str):
         logging.info(f"For perceptibility {perceptibility}: {image.storage_capacity}B")
 
 
-def storage_stats_png(filename: str):
+def storage_stats_png(filename: str) -> None:
     logging.info(f"Preparing storage statistics for '{filename}.png'...")
 
     for number_of_least_significant_bit in range(1, 5):
@@ -26,7 +29,49 @@ def storage_stats_png(filename: str):
         logging.info(f"For {number_of_least_significant_bit} least significant bits: {image.storage_capacity}B")
 
 
-def crop_jpeg(source_file: str, destination: str):
+def histogram(source_file: str, destination: str) -> None:
+    logging.info(f"Saving histogram for image '{source_file}'...")
+    image = cv2.imread(source_file, cv2.IMREAD_GRAYSCALE)
+
+    plt.figure(figsize=(15, 10))
+    plt.hist(image.reshape(image.size), bins=255, color="slategrey")
+    plt.savefig(destination)
+
+
+def compute_mse(image: np.ndarray, stego_image: np.ndarray) -> float:
+    return np.sum((image - stego_image) ** 2) / image.size
+
+
+def mse(image_file: str, stego_file: str) -> None:
+    logging.info(f"Computing MSE for image '{image_file}' and stego image '{stego_file}'...")
+    image = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
+    stego_image = cv2.imread(stego_file, cv2.IMREAD_UNCHANGED)
+
+    logging.info(f"MSE = {compute_mse(image, stego_image):.2f}")
+
+
+def psnr(image_file: str, stego_file: str) -> None:
+    logging.info(f"Computing PSNR for image '{image_file}' and stego image '{stego_file}'...")
+    image = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
+    stego_image = cv2.imread(stego_file, cv2.IMREAD_UNCHANGED)
+
+    maximum = 255
+    mse = compute_mse(image, stego_image)
+    psnr = 10 * np.log10(maximum ** 2 / mse)
+
+    logging.info(f"PSNR = {psnr:.2f}")
+
+
+def ssim(image_file: str, stego_file: str) -> None:
+    logging.info(f"Computing SSIM for image '{image_file}' and stego image '{stego_file}'...")
+    image = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
+    stego_image = cv2.imread(stego_file, cv2.IMREAD_GRAYSCALE)
+
+    ssim = structural_similarity(image, stego_image, data_range=stego_image.max() - stego_image.min())
+    logging.info(f"SSIM = {float(ssim):.2f}")
+
+
+def crop_jpeg(source_file: str, destination: str) -> None:
     logging.info(f"Cropping '{source_file}.jpg' to its middle third in both dimensions...")
     image = jpeglib.read_dct(source_file)
 
@@ -49,7 +94,7 @@ def crop_jpeg(source_file: str, destination: str):
     image.write_dct(destination)
 
 
-def crop_png(source_file: str, destination: str):
+def crop_png(source_file: str, destination: str) -> None:
     logging.info(f"Cropping '{source_file}.png' to its middle third in both dimensions...")
     image = cv2.imread(source_file, cv2.IMREAD_UNCHANGED)
     temporary_image = pyexiv2.Image(source_file)
@@ -66,7 +111,7 @@ def crop_png(source_file: str, destination: str):
     temporary_image.close()
 
 
-def recover(source_file: str, pattern_file: str):
+def recover(source_file: str, pattern_file: str) -> None:
     logging.info(f"Loading '{source_file}' source file from disk...")
     with open(source_file, "rb") as file:
         source = file.read()
@@ -92,7 +137,7 @@ def recover(source_file: str, pattern_file: str):
     logging.info(f"Found {maximum_number_of_matches} matches of the pattern in the source file, after removing the leading {leading_bits_removed} bits.")
 
 
-def visual_attack_jpeg(source_file: str, destination: str, number_of_least_significant_bits: str, luminance_boost: str):
+def visual_attack_jpeg(source_file: str, destination: str, number_of_least_significant_bits: str, luminance_boost: str) -> None:
     logging.info(f"Preparing bitmask for visual attack on '{source_file}'...")
     bitmask = 255 >> (8 - int(number_of_least_significant_bits))
 
@@ -105,7 +150,7 @@ def visual_attack_jpeg(source_file: str, destination: str, number_of_least_signi
     cv2.imwrite(destination, image)
 
 
-def visual_attack_png(source_file: str, destination: str, number_of_least_significant_bits: str, luminance_boost: str):
+def visual_attack_png(source_file: str, destination: str, number_of_least_significant_bits: str, luminance_boost: str) -> None:
     logging.info(f"Preparing bitmask for visual attack on '{source_file}'...")
     bitmask = 255 >> (8 - int(number_of_least_significant_bits))
 
@@ -124,6 +169,14 @@ def main(args):
             storage_stats_jpeg(args.storage_stats)
         else:
             storage_stats_png(args.storage_stats)
+    elif args.histogram:
+        histogram(*args.histogram)
+    elif args.mse:
+        mse(*args.mse)
+    elif args.psnr:
+        psnr(*args.psnr)
+    elif args.ssim:
+        ssim(*args.ssim)
     elif args.crop:
         if args.type_of_image == "jpeg":
             crop_jpeg(*args.crop)
@@ -140,7 +193,7 @@ def main(args):
     logging.info("Done.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     parser = argparse.ArgumentParser(
@@ -151,9 +204,9 @@ if __name__ == '__main__':
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-s", "--storage-stats", choices=["portrait", "sky", "chess"], dest="storage_stats", metavar="BUILT-IN-IMAGE")
     group.add_argument("-i", "--histogram", nargs=2, metavar=("SOURCE-FILE", "DESTINATION"))
-    group.add_argument("-mse", "--mean-squared-error", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
-    group.add_argument("-psnr", "--peak-signal-to-noise-ratio", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
-    group.add_argument("-ssim", "--structural-similarity", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
+    group.add_argument("-mse", "--mean-squared-error", nargs=2, dest="mse", metavar=("IMAGE-FILE", "STEGO-FILE"))
+    group.add_argument("-psnr", "--peak-signal-to-noise-ratio", dest="psnr", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
+    group.add_argument("-ssim", "--structural-similarity", dest="ssim", nargs=2, metavar=("IMAGE-FILE", "STEGO-FILE"))
     group.add_argument("-c", "--crop", nargs=2, metavar=("SOURCE-FILE", "DESTINATION"))
     group.add_argument("-r", "--recover", nargs=2, metavar=("SOURCE-FILE", "DATA-TO-SEARCH-FOR"))
     group.add_argument("-v", "--visual-attack", nargs=4, metavar=("SOURCE-FILE", "DESTINATION", "NUMBER-OF-LEAST-SIGNIFICANT-BITS", "LUMINANCE-BOOST"))
