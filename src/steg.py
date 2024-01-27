@@ -60,6 +60,15 @@ def compute_storage_capacity(args):
     print(f"Storage capacity: {image.storage_capacity}B")
 
 
+def data_detection(args):
+    logging.info("Reading image from disk.")
+
+    if args.grayscale:
+        pass
+    else:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="Interface for command line use of the built-in image steganography package. "
                                                  "This program supports embedding arbitrary binary data into png and jpeg images. "
@@ -89,6 +98,10 @@ def main():
     storage_capacity_parser.add_argument("-n", "--number-of-least-significant-bits", choices=range(1, 5), default=1, dest="number_of_least_significant_bits", type=int, help="only available for PNG images")
     storage_capacity_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data")
 
+    detection_parser = subparsers.add_parser("detect", aliases=["d"], description="Subcommand for detecting if covert data has been embedded into an image.")
+    detection_parser.add_argument("-i", "--input-image", dest="input_image", metavar="INPUT-IMAGE", type=str, required=True, help="path to image which will be analyzed")
+    detection_parser.add_argument("-g", "--grayscale", action="store_true", help="whether or not the input image is grayscale")
+
     arguments = parser.parse_args()
     logging.basicConfig(level=arguments.log_level, format="%(levelname)s: %(message)s")
     pyexiv2.set_log_level(3)
@@ -99,6 +112,8 @@ def main():
         data_extraction(arguments)
     elif arguments.subcommand in ["storage", "s"]:
         compute_storage_capacity(arguments)
+    elif arguments.subcommand in ["detect", "d"]:
+        data_detection(arguments)
 
 
 if __name__ == '__main__':
