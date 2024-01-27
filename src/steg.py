@@ -4,6 +4,7 @@ import pyexiv2
 
 from steganography import lsb_steganography
 from steganography import dct_steganography
+from steganography import steganalysis
 
 
 def data_embedding(args):
@@ -63,10 +64,14 @@ def compute_storage_capacity(args):
 def data_detection(args):
     logging.info("Reading image from disk.")
 
-    if args.grayscale:
-        pass
+    alpha = 0.05
+    if args.alpha:
+        alpha = args.alpha
+
+    if args.type_of_image == "png":
+        steganalysis.lsb_detection(args.input_image, args.grayscale, alpha)
     else:
-        pass
+        steganalysis.jsteg_detection(args.input_image, args.grayscale, alpha)
 
 
 def main():
@@ -101,6 +106,7 @@ def main():
     detection_parser = subparsers.add_parser("detect", aliases=["d"], description="Subcommand for detecting if covert data has been embedded into an image.")
     detection_parser.add_argument("-i", "--input-image", dest="input_image", metavar="INPUT-IMAGE", type=str, required=True, help="path to image which will be analyzed")
     detection_parser.add_argument("-g", "--grayscale", action="store_true", help="whether or not the input image is grayscale")
+    detection_parser.add_argument("-a", "--alpha", dest="alpha", type=float, help="oset different theshold for the p-value (optional)")
 
     arguments = parser.parse_args()
     logging.basicConfig(level=arguments.log_level, format="%(levelname)s: %(message)s")
