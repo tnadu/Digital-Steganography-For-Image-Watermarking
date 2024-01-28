@@ -1,7 +1,9 @@
+import logging
+import jpeglib
 import cv2
 import numpy as np
+
 from scipy.stats import chi2_contingency
-import jpeglib
 
 
 def lsb_detection(image_path, grayscale=False, alpha=0.05):
@@ -20,12 +22,12 @@ def lsb_detection(image_path, grayscale=False, alpha=0.05):
 
         # Chi-squared test
         chi2_stat, p_value, _, _ = chi2_contingency([observed_freq, expected_freq])
-        print(f"P-value: {p_value}")
+        logging.debug(f"p-value = {p_value}")
 
         if p_value < alpha:
-            print("LSB steganography detected!")
+            logging.info("LSB steganography detected!")
         else:
-            print("No evidence of LSB steganography.")
+            logging.info("No evidence of LSB steganography.")
 
     else:
         image = cv2.imread(image_path)
@@ -50,17 +52,17 @@ def lsb_detection(image_path, grayscale=False, alpha=0.05):
         chi2_stat_g, p_value_g, _, _ = chi2_contingency([observed_freq_g, expected_freq_g])
         chi2_stat_b, p_value_b, _, _ = chi2_contingency([observed_freq_b, expected_freq_b])
 
-        print(f"P-value for red channel: {p_value_r}")
-        print(f"P-value for green channel: {p_value_g}")
-        print(f"P-value for blue channel: {p_value_b}")
+        logging.debug(f"p-value for red channel: {p_value_r}")
+        logging.debug(f"p-value for green channel: {p_value_g}")
+        logging.debug(f"p-value for blue channel: {p_value_b}")
 
         if any(p_value < alpha for p_value in [p_value_r, p_value_g, p_value_b]):
-            print("LSB steganography detected!")
+            logging.info("LSB steganography detected!")
         else:
-            print("No evidence of LSB steganography.")
+            logging.info("No evidence of LSB steganography.")
 
 
-def jsteg_detection(image_path, grayscale=False, alpha=0.05):
+def dct_detection(image_path, grayscale=False, alpha=0.05):
     dct = jpeglib.read_dct(image_path)
     y_coefficients = dct.Y
     # Remove the 0s and the 1s
@@ -70,7 +72,7 @@ def jsteg_detection(image_path, grayscale=False, alpha=0.05):
     expected_y = calculate_expected_frequency(y_coefficients)
 
     chi2_stat_y, p_value_y, _, _ = chi2_contingency([observed_y, expected_y])
-    print(f"P-value for Y channel: {p_value_y}")
+    logging.debug(f"p-value for Y channel = {p_value_y}")
     
     if not grayscale:
         cr_coefficients = dct.Cr
@@ -88,24 +90,25 @@ def jsteg_detection(image_path, grayscale=False, alpha=0.05):
         chi2_stat_cr, p_value_cr, _, _ = chi2_contingency([observed_cr, expected_cr])
         chi2_stat_cb, p_value_cb, _, _ = chi2_contingency([observed_cb, expected_cb])
 
-        print(f"P-value for Cr channel: {p_value_cr}")
-        print(f"P-value for Cb channel: {p_value_cb}")
+        logging.debug(f"p-value for Cr channel = {p_value_cr}")
+        logging.debug(f"p-value for Cb channel = {p_value_cb}")
 
-    jsteg_detected = False
     if grayscale:
-        jsteg_detected = p_value_y < alpha
+        dct_detected = p_value_y < alpha
     else:
-        jsteg_detected = any(p_value < alpha for p_value in [p_value_y, p_value_cr, p_value_cb])
+        dct_detected = any(p_value < alpha for p_value in [p_value_y, p_value_cr, p_value_cb])
     
-    if jsteg_detected:
-        print("JSTEG steganography detected!")
+    if dct_detected:
+        logging.info("DCT steganography detected!")
     else:
-        print("No evidence of JSTEG steganography.")
+        logging.info("No evidence of DCT steganography.")
+
 
 def calculate_dct_distribution(coefficients):
     lsb_values = coefficients & 1
     observed_freq, _ = np.histogram(lsb_values, bins=range(3))
     return observed_freq
+
 
 def calculate_expected_frequency(coefficients):
     total = len(coefficients)

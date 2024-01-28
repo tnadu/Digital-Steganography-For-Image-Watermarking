@@ -63,15 +63,10 @@ def compute_storage_capacity(args):
 
 def data_detection(args):
     logging.info("Reading image from disk.")
-
-    alpha = 0.05
-    if args.alpha:
-        alpha = args.alpha
-
     if args.type_of_image == "png":
-        steganalysis.lsb_detection(args.input_image, args.grayscale, alpha)
+        steganalysis.lsb_detection(image_path=args.input_image, grayscale=args.grayscale, alpha=args.alpha)
     else:
-        steganalysis.jsteg_detection(args.input_image, args.grayscale, alpha)
+        steganalysis.dct_detection(image_path=args.input_image, grayscale=args.grayscale, alpha=args.alpha)
 
 
 def main():
@@ -82,7 +77,7 @@ def main():
                                                  "security purposes, it is strongly advised to encrypt data before embedding it "
                                                  "into images.")
 
-    parser.add_argument("-l", "--log-level", choices=[10, 20, 30, 40], default=20, dest="log_level", metavar="LOG-LEVEL", type=int, help="DEBUG=10, INFO=20, WARNING=30, ERROR=40")
+    parser.add_argument("-l", "--log-level", choices=[10, 20, 30, 40], default=20, dest="log_level", metavar="LOG-LEVEL", type=int, help="DEBUG=10, INFO=20, WARNING=30, ERROR=40; defaults to 20")
     parser.add_argument("-t", "--type-of-image", choices=["jpeg", "png"], dest="type_of_image", metavar="TYPE-OF-IMAGE", required=True, help="when 'jpeg', the JSTEG algorithm is used; when 'png', the LSB algorithm is used")
     subparsers = parser.add_subparsers(title="subcommands", dest="subcommand", required=True)
 
@@ -91,8 +86,8 @@ def main():
     embedding_parser.add_argument("-o", "--output-image", dest="output_image", metavar="OUTPUT-IMAGE", type=str, required=True, help="path to which the stego image will be saved")
     embedding_parser.add_argument("-d", "--data", type=str, required=True, help="path to the data which will be embedded into the chosen image")
     embedding_parser.add_argument("-w", "--watermark", action="store_true", help="fill the whole storage capacity of the image with sequential copies of the specified data; will only embed as many full copies as the space allows")
-    embedding_parser.add_argument("-n", "--number-of-least-significant-bits", choices=range(1, 5), default=1, dest="number_of_least_significant_bits", type=int, help="only available for PNG images")
-    embedding_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data")
+    embedding_parser.add_argument("-n", "--number-of-least-significant-bits", choices=range(1, 5), default=1, dest="number_of_least_significant_bits", type=int, help="only available for PNG images; defaults to 1")
+    embedding_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data; defaults to 3")
 
     extraction_parser = subparsers.add_parser("extract", aliases=["ex", "x"], description="Subcommand for extracting arbitrary data from a stego image.")
     extraction_parser.add_argument("-i", "--input-stego-image", dest="input_stego_image", metavar="INPUT-STEGO-IMAGE", type=str, required=True, help="path to the stego image from which data will be extracted")
@@ -100,13 +95,13 @@ def main():
 
     storage_capacity_parser = subparsers.add_parser("storage", aliases=["s"], description="Subcommand for computing the storage capacity of a given image.")
     storage_capacity_parser.add_argument("-i", "--input-image", dest="input_image", metavar="INPUT-IMAGE", type=str, required=True, help="path to image for which the storage capacity will be computed")
-    storage_capacity_parser.add_argument("-n", "--number-of-least-significant-bits", choices=range(1, 5), default=1, dest="number_of_least_significant_bits", type=int, help="only available for PNG images")
-    storage_capacity_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data")
+    storage_capacity_parser.add_argument("-n", "--number-of-least-significant-bits", choices=range(1, 5), default=1, dest="number_of_least_significant_bits", type=int, help="only available for PNG images; defaults to 1")
+    storage_capacity_parser.add_argument("-p", "--perceptibility", choices=range(1, 9), default=3, type=int, help="only available for JPEG images; this controls how much of the top-left corner of each DCT block is used to store the embedded data; defaults to 3")
 
     detection_parser = subparsers.add_parser("detect", aliases=["d"], description="Subcommand for detecting if covert data has been embedded into an image.")
     detection_parser.add_argument("-i", "--input-image", dest="input_image", metavar="INPUT-IMAGE", type=str, required=True, help="path to image which will be analyzed")
     detection_parser.add_argument("-g", "--grayscale", action="store_true", help="whether or not the input image is grayscale")
-    detection_parser.add_argument("-a", "--alpha", dest="alpha", type=float, help="oset different theshold for the p-value (optional)")
+    detection_parser.add_argument("-a", "--alpha", default=0.05, type=float, help="set the threshold for the p-value; defaults to 0.05")
 
     arguments = parser.parse_args()
     logging.basicConfig(level=arguments.log_level, format="%(levelname)s: %(message)s")

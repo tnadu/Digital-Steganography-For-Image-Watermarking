@@ -185,6 +185,7 @@ def main(args):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    pyexiv2.set_log_level(3)
 
     parser = argparse.ArgumentParser(
         description="Bundle of helpful functions, making use of the built-in steganography package and data assets.")
