@@ -35,7 +35,7 @@ def histogram(source_file: str, destination: str) -> None:
 
     plt.figure(figsize=(15, 10))
     plt.hist(image.reshape(image.size), bins=255, color="slategrey")
-    plt.savefig(destination)
+    plt.savefig(destination, bbox_inches="tight")
 
 
 def compute_mse(image: np.ndarray, stego_image: np.ndarray) -> float:
